@@ -8,11 +8,11 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	_ "k8s.io/kubernetes/pkg/api/install"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	_ "k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apis/batch"
 	_ "k8s.io/kubernetes/pkg/apis/batch/install" // to register types
 	"k8s.io/kubernetes/pkg/apis/batch/v1"
-	utilerrors "k8s.io/kubernetes/pkg/util/errors"
 )
 
 // Defaulter defines interface for a Workflow defaulter

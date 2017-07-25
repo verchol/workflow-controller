@@ -1,10 +1,8 @@
 package testing
 
 import (
-	"fmt"
-	"io/ioutil"
 
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
@@ -12,24 +10,6 @@ import (
 
 	wapi "github.com/sdminonne/workflow-controller/pkg/api"
 )
-
-// DumpWorkflow dumps a workflow in a tmp file
-func DumpWorkflowInTmpFile(w *wapi.Workflow) (string, error) {
-	tmpfile, err := ioutil.TempFile("", "workflow")
-	if err != nil {
-		return "", err
-	}
-	defer tmpfile.Close()
-	s := spew.ConfigState{
-		Indent: " ",
-		// Extra deep spew.
-		DisableMethods: true,
-	}
-	if _, err := tmpfile.Write([]byte(s.Sdump(w))); err != nil {
-		return "", fmt.Errorf("cannot write in tmp file: %v", err)
-	}
-	return tmpfile.Name(), nil
-}
 
 // NewJobTemplatespec is an utility function to create a JobTemplateSpec
 func NewJobTemplateSpec() *batch.JobTemplateSpec {

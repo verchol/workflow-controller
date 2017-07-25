@@ -1,0 +1,55 @@
+package: github.com/sdminonne/workflow-controller
+import:
+- package: github.com/golang/glog
+- package: github.com/onsi/ginkgo
+  version: ^1.4.0
+- package: github.com/onsi/gomega
+  version: ^1.2.0
+- package: github.com/spf13/pflag
+  version: ^1.0.0
+- package: k8s.io/apiextensions-apiserver
+  subpackages:
+  - pkg/apis/apiextensions/v1beta1
+  - pkg/client/clientset/clientset
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/api/errors
+  - pkg/apis/meta/v1
+  - pkg/apis/meta/v1/validation
+  - pkg/runtime/schema
+  - pkg/util/errors
+  - pkg/util/runtime
+  - pkg/util/sets
+  - pkg/util/validation/field
+  - pkg/util/wait
+- package: k8s.io/apiserver
+  subpackages:
+  - pkg/util/flag
+  - pkg/util/logs
+- package: k8s.io/client-go
+  version: ^4.0.0-beta.0
+  subpackages:
+  - dynamic
+  - kubernetes
+  - kubernetes/typed/core/v1
+  - rest
+  - tools/clientcmd
+  - tools/record
+  - util/workqueue
+- package: k8s.io/kubernetes
+  version: ^1.8.0-alpha.2
+  subpackages:
+  - pkg/api
+  - pkg/api/install
+  - pkg/api/meta
+  - pkg/api/unversioned
+  - pkg/api/validation
+  - pkg/apis/batch
+  - pkg/apis/batch/install
+  - pkg/apis/batch/v1
+  - pkg/apis/batch/validation
+  - pkg/apis/extensions
+  - pkg/client/clientset_generated/internalclientset
+  - pkg/controller
+  - pkg/labels
+  - pkg/runtime

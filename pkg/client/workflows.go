@@ -17,33 +17,20 @@ limitations under the License.
 package client
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
-	"github.com/golang/glog"
-
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/api/meta"
-	"k8s.io/kubernetes/pkg/runtime"
-	"k8s.io/kubernetes/pkg/util/wait"
 
-	"k8s.io/kubernetes/pkg/api/v1"
-
-	apierrs "k8s.io/kubernetes/pkg/api/errors"
 	"k8s.io/kubernetes/pkg/api/unversioned"
-	"k8s.io/kubernetes/pkg/apis/extensions"
-	clientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
-	"k8s.io/kubernetes/pkg/client/restclient"
-	"k8s.io/kubernetes/pkg/client/typed/dynamic"
-	"k8s.io/kubernetes/pkg/registry/thirdpartyresourcedata"
-	"k8s.io/kubernetes/pkg/watch"
+
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 
 	wapi "github.com/sdminonne/workflow-controller/pkg/api"
-	wcodec "github.com/sdminonne/workflow-controller/pkg/api/codec"
-	//"github.com/sdminonne/workflow-controller/vendor/k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/rbac/unversioned"
-	//"github.com/sdminonne/workflow-controller/vendor/k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/storage/unversioned"
-	//"github.com/sdminonne/workflow-controller/vendor/k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/extensions/unversioned"
 )
 
 // WorkflowsNamespacer has methods to work with Workflow resources in a namespace
@@ -62,13 +49,12 @@ type WorkflowInterface interface {
 	Update(workflow *wapi.Workflow) (*wapi.Workflow, error)
 	Delete(name string, options *api.DeleteOptions) error
 
-	Watch(options api.ListOptions) (watch.Interface, error)
+	//Watch(options api.ListOptions) (watch.Interface, error)
 }
 
 // Client implements a workflow client
 type Client struct {
 	*dynamic.Client
-	tmpRestClient    *restclient.RESTClient // TODO: remove it only needed for DELETE
 	restResource     string
 	groupVersionKind *unversioned.GroupVersionKind
 }
@@ -78,34 +64,51 @@ func (c Client) Workflows(ns string) WorkflowInterface {
 	return newWorkflows(c, ns)
 }
 
-// NewForConfigOrDie creates and initializes a Workflow REST client. It panics in case of error
-func NewForConfigOrDie(resource *extensions.ThirdPartyResource, config *restclient.Config) Interface {
-	kind, group, err := thirdpartyresourcedata.ExtractApiGroupAndKind(resource)
-	if err != nil {
-		panic(err)
+// CreateWorkflowResource creates the Workflow resource as a Kubernetes CR
+func CreateWorkflowResource() *apiextensionsv1beta1.CustomResourceDefinition {
+	return &apiextensionsv1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "workflows.amadeus.net"},
+		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
+			Group:   "amadeus.net",
+			Version: "v1beta1",
+			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+				Plural:     "workflows",
+				Singular:   "workflow",
+				Kind:       "Workflow",
+				ShortNames: []string{"wfl"},
+				ListKind:   "WorkflowsList",
+			},
+			Scope: apiextensionsv1beta1.ClusterScoped,
+		},
 	}
-	gkv := unversioned.GroupVersionKind{Group: group, Version: resource.Versions[0].Name, Kind: kind}
-	plural, _ := meta.KindToResource(gkv)
-	config.GroupVersion = &unversioned.GroupVersion{
-		Group:   group,
-		Version: resource.Versions[0].Name,
+}
+
+// CreateWorkflowClient creates the client to handle Workflows
+func CreateWorkflowClient(crd *apiextensionsv1beta1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, clientPool dynamic.ClientPool) (*dynamic.Client, error) {
+	_, err := apiExtensionsClient.Apiextensions().CustomResourceDefinitions().Create(crd)
+	if err != nil {
+		return nil, err
 	}
 
-	config.APIPath = "/apis"
-	dynamicClient, err := dynamic.NewClient(config)
+	// wait until the resource appears in discovery
+	err = wait.PollImmediate(500*time.Millisecond, 30*time.Second, func() (bool, error) {
+		resourceList, err := apiExtensionsClient.Discovery().ServerResourcesForGroupVersion(crd.Spec.Group + "/" + crd.Spec.Version)
+		if err != nil {
+			return false, nil
+		}
+		for _, resource := range resourceList.APIResources {
+			if resource.Name == crd.Spec.Names.Plural {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	// HACK
-	// TODO: remove it when dynamicClient will support DELETE for thirdPartyResource
-	config.NegotiatedSerializer = api.Codecs
-	tmpRestClient, err := restclient.RESTClientFor(config)
-	if err != nil {
-		panic(err)
-	}
+	return clientPool.ClientForGroupVersionResource(schema.GroupVersionResource{Group: crd.Spec.Group, Version: crd.Spec.Version, Resource: crd.Spec.Names.Plural})
 
-	return Client{dynamicClient, tmpRestClient, plural.Resource, &gkv}
 }
 
 // workflows implements WorkflowsNamespacer interface
@@ -131,128 +134,38 @@ var _ WorkflowInterface = &workflows{}
 
 // Create creates a Workflow
 func (w *workflows) Create(workflow *wapi.Workflow) (*wapi.Workflow, error) {
-	unstruct, err := wcodec.WorkflowToUnstructured(workflow, w.gvk)
-	if err != nil {
-		return nil, fmt.Errorf("cannot encode workflow %q: %v", workflow.Name, err)
-	}
-	createdUnstruct, err := w.c.Resource(w.resource, w.ns).Create(unstruct)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create workflow %q: %v", workflow.Name, err)
-	}
-	createdWorkflow, err := wcodec.UnstructuredToWorkflow(createdUnstruct)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode workflow %q: %v", workflow.Name, err)
-	}
-	return createdWorkflow, nil
+	return nil, nil
 }
 
 // List returns a list of workflows that match the label and field selectors.
 func (w *workflows) List(options api.ListOptions) (*wapi.WorkflowList, error) {
-	v1Options := v1.ListOptions{}
-	v1.Convert_api_ListOptions_To_v1_ListOptions(&options, &v1Options, nil)
-	obj, err := w.c.Resource(w.resource, w.ns).List(&v1Options)
-	if err != nil {
-		return nil, fmt.Errorf("unable to list workflows: %v ", err)
-	}
-
-	uList, ok := obj.(*runtime.UnstructuredList)
-	if !ok {
-		return nil, fmt.Errorf("unable to list workflows")
-	}
-
-	list := &wapi.WorkflowList{}
-	for i := range uList.Items {
-		workflow, err := wcodec.UnstructuredToWorkflow(uList.Items[i])
-		if err != nil {
-			return nil, fmt.Errorf("unabel to list workflows: %v", err)
-		}
-		list.Items = append(list.Items, *workflow)
-	}
-	return list, nil
+	return &wapi.WorkflowList{}, nil
 }
 
 // Get returns information about a particular workflow.
 func (w *workflows) Get(name string) (*wapi.Workflow, error) {
-	u, err := w.c.Resource(w.resource, w.ns).Get(name)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get workflow %q: %v", name, err)
-	}
-
-	workflow, err := wcodec.UnstructuredToWorkflow(u)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode workflow %q: %v", name, err)
-	}
-	return workflow, nil
+	workflow := &wapi.Workflow{}
+	return &wapi.Workflow{}, nil
 }
 
 // Update updates an existing workflow. TODO: implement via PATCH
 func (w *workflows) Update(workflow *wapi.Workflow) (*wapi.Workflow, error) {
-	unstruct, err := wcodec.WorkflowToUnstructured(workflow, w.gvk)
-	if err != nil {
-		return nil, fmt.Errorf("cannot encode workflow %q: %v", workflow.Name, err)
-	}
-	updatedUnstruct, err := w.c.Resource(w.resource, w.ns).Update(unstruct)
-	if err != nil {
-		return nil, fmt.Errorf("cannot update workflow %q: %v", workflow.Name, err)
-	}
-	updatedWorkflow, err := wcodec.UnstructuredToWorkflow(updatedUnstruct)
-	if err != nil {
-		return nil, fmt.Errorf("cannot decode workflow %q: %v", workflow.Name, err)
-	}
+	updatedWorkflow := &wapi.Workflow{}
 	return updatedWorkflow, nil
 
 }
 
 // Delete deletes a workflow, returns error if one occurs.
 func (w *workflows) Delete(name string, options *api.DeleteOptions) error {
-	//return w.c.Resource(w.resource, w.ns).Delete(name, &v1.DeleteOptions{})
-	// TODO: using raw request since dynamicClient cannot handle Delete of a ThirdPartyResouce
-	return w.c.tmpRestClient.Delete().NamespaceIfScoped(w.ns, len(w.ns) > 0).
-		Resource(w.resource.Name).
-		Name(name).
-		Body(options).
-		Do().
-		Error()
-}
-
-// RegisterWorkflow registers Workflow resource as k8s ThirdPartyResouce object
-func RegisterWorkflow(kubeClient clientset.Interface, resource, domain string, versions []string) (*extensions.ThirdPartyResource, error) {
-	glog.V(4).Infof("Trying to create ThirdPartyResource %v.%v version %v", resource, domain, versions)
-	APIVersions := []extensions.APIVersion{}
-	for _, v := range versions {
-		APIVersions = append(APIVersions, extensions.APIVersion{Name: v})
-	}
-	thirdPartyResource := &extensions.ThirdPartyResource{
-		ObjectMeta: api.ObjectMeta{
-			Name: strings.Join([]string{resource, domain}, "."),
-		},
-		Description: "Workflow as thrid party resource. Automatically registered by controller.",
-		Versions:    APIVersions,
-	}
-	_, err := kubeClient.Extensions().ThirdPartyResources().Create(thirdPartyResource)
-	return thirdPartyResource, err
+	return nil
 }
 
 // IsWorkflowRegistered returns wheter or not the Workflow with specific group, name and version is registered
-func IsWorkflowRegistered(kubeClient clientset.Interface, resource, domain string, version string) (bool, error) {
-	resourceName := strings.Join([]string{resource, domain}, ".")
-	r, err := kubeClient.Extensions().ThirdPartyResources().Get(resourceName)
-	if err != nil {
-		return false, fmt.Errorf("unable to get resource %q: %v", resourceName, err)
-	}
-	if r == nil {
-		return false, fmt.Errorf("unable to find resource %q", resourceName)
-	}
-	availableVersions := []string{}
-	for i := range r.Versions {
-		availableVersions = append(availableVersions, r.Versions[i].Name)
-		if r.Versions[i].Name == version {
-			return true, nil
-		}
-	}
-	return false, fmt.Errorf("resource %q found. Bad version %q, available versions: %s", resourceName, version, availableVersions)
+func IsWorkflowRegistered(crd *apiextensionsv1beta1.CustomResourceDefinition, apiExtensionsClient clientset.Interface, clientPool dynamic.ClientPool) (bool, error) {
+	return true, nil
 }
 
+/*
 // Watch returns a watch.Interface that watches the requested workflows.
 func (w *workflows) Watch(options api.ListOptions) (watch.Interface, error) {
 	glog.V(6).Infof("Watching workflows...")
@@ -297,3 +210,4 @@ func (w *workflows) Watch(options api.ListOptions) (watch.Interface, error) {
 	}, 25*time.Millisecond, wait.NeverStop)
 	return watcher, nil
 }
+*/

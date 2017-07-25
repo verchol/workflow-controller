@@ -20,26 +20,24 @@ import (
 	"fmt"
 	"sort"
 
+	v1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	kapi "k8s.io/kubernetes/pkg/api"
-	unversionedvalidation "k8s.io/kubernetes/pkg/api/unversioned/validation"
 	kapivalidation "k8s.io/kubernetes/pkg/api/validation"
 	batchvalidation "k8s.io/kubernetes/pkg/apis/batch/validation"
-	"k8s.io/kubernetes/pkg/util/sets"
-	"k8s.io/kubernetes/pkg/util/validation/field"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/golang/glog"
 	wapi "github.com/sdminonne/workflow-controller/pkg/api"
 )
 
 // ValidateWorkflow validates a workflow
 func ValidateWorkflow(workflow *wapi.Workflow) field.ErrorList {
-	s := spew.ConfigState{
-		Indent: " ",
-		// Extra deep spew.
-		DisableMethods: true,
-	}
-	glog.V(6).Infof("Workflow %s\n", s.Sdump(workflow))
+	//s := spew.ConfigState{
+	//	Indent: " ",
+	//	// Extra deep spew.
+	//	DisableMethods: true,
+	//}
+	//glog.V(6).Infof("Workflow %s\n", s.Sdump(workflow))
 
 	allErrs := kapivalidation.ValidateObjectMeta(&workflow.ObjectMeta, true, kapivalidation.ValidateReplicationControllerName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateWorkflowSpec(&(workflow.Spec), field.NewPath("spec"))...)
@@ -55,7 +53,7 @@ func ValidateWorkflowSpec(spec *wapi.WorkflowSpec, fieldPath *field.Path) field.
 	if spec.Selector == nil {
 		allErrs = append(allErrs, field.Required(fieldPath.Child("selector"), ""))
 	} else {
-		allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, fieldPath.Child("selector"))...)
+		allErrs = append(allErrs, v1validation.ValidateLabelSelector(spec.Selector, fieldPath.Child("selector"))...)
 	}
 	// TODO: workflow.spec.selector must be convertible to labels.Set
 	// TODO: JobsTemplate must not have any label confliciting with workflow.spec.selector
@@ -164,7 +162,7 @@ func ValidateExternalReference(externalReference *kapi.ObjectReference, fieldPat
 // ValidateWorkflowStatus validates statuses update
 func ValidateWorkflowStatus(status *wapi.WorkflowStatus, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
-	glog.V(6).Infof("Validating WorkflowStatus %v\n", spew.Sdump(*status))
+	//glog.V(6).Infof("Validating WorkflowStatus %v\n", spew.Sdump(*status))
 	//TODO: @sdminonne add status validation
 	return allErrs
 }

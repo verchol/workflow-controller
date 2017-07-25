@@ -17,20 +17,22 @@ limitations under the License.
 package app
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/golang/glog"
-	"k8s.io/kubernetes/pkg/api/errors"
-	"k8s.io/kubernetes/pkg/apis/extensions"
-	clientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
-	"k8s.io/kubernetes/pkg/client/restclient"
-	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
-	"k8s.io/kubernetes/pkg/util/wait"
 
 	wclient "github.com/sdminonne/workflow-controller/pkg/client"
 	"github.com/sdminonne/workflow-controller/pkg/workflow"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // WorkflowController contains all info to run the worklow controller app
@@ -38,15 +40,36 @@ type WorkflowController struct {
 	controller *workflow.Controller
 }
 
+func createKubeClient(c *Config) (*kubernetes.Clientset, error) {
+	// out of cluster config
+	if len(c.KubeConfigFile) > 0 {
+		config, err := clientcmd.BuildConfigFromFlags("", c.KubeConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("unable to recognize KubeConfigFile:%s:%v", c.KubeConfigFile, err)
+		}
+		return kubernetes.NewForConfig(config)
+	}
+	// in cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize in cluster config:%v", err)
+	}
+	return kubernetes.NewForConfig(config)
+}
+
 // NewWorkflowController  initializes and returns a ready to run WorkflowController
 func NewWorkflowController(c *Config) *WorkflowController {
-	kubeconfig, err := clientcmd.BuildConfigFromFlags(c.KubeMasterURL, c.KubeConfigFile)
+	kubeClient, err := createKubeClient(c)
 	if err != nil {
-		glog.Fatalf("Unable to start workflow controller: %v", err)
+		glog.Fatalf("Unable to init workflow controller: %v", err)
 	}
 
-	kubeClient := clientset.NewForConfigOrDie(restclient.AddUserAgent(kubeconfig, "workflow-controller"))
-	thirdPartyResource := &extensions.ThirdPartyResource{}
+	crd := wclient.CreateWorkflowResource()
+
+	//workflowClient := wclient.CreateWorkflowClient()
+
+	//kubeClient := clientset.NewForConfigOrDie(restclient.AddUserAgent(kubeconfig, "workflow-controller"))
+	//thirdPartyResource := &extensions.ThirdPartyResource{}
 	stopChannel := make(chan struct{})
 	wait.Until(func() {
 		thirdPartyResource, err = wclient.RegisterWorkflow(kubeClient, c.ResourceName, c.ResourceDomain, c.ResourceVersions)

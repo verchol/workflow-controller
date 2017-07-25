@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Framework stores necessary info to run e2e

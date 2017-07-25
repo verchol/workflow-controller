@@ -27,7 +27,7 @@ all: build
 build: ${ARTIFACT}
 
 ${ARTIFACT}: ${SOURCES}
-	CGO_ENABLED=0 GOOS=linux godep go build -i -installsuffix cgo -ldflags '-w' -o ${ARTIFACT} ./main.go
+	CGO_ENABLED=0 GOOS=linux go build -i -installsuffix cgo -ldflags '-w' -o ${ARTIFACT} ./main.go
 
 container: build
 	docker build -t $(PREFIX):$(TAG) .
@@ -36,10 +36,6 @@ push: container
 	@echo "He we should push..."
 	#docker push $(PREFIX):$(TAG)
 	#gcloud docker push $(PREFIX):$(TAG)
-
-depend:
-	rm -rf Godeps vendor
-	godep save
 
 clean:
 	rm -f ${ARTIFACT}

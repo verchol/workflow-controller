@@ -23,10 +23,10 @@ import (
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apis/batch"
 	"k8s.io/kubernetes/pkg/apis/extensions"
-
 	"k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/fake"
-	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
 	"k8s.io/kubernetes/pkg/controller"
+
+	"k8s.io/client-go/tools/clientcmd"
 
 	wapi "github.com/sdminonne/workflow-controller/pkg/api"
 	wclient "github.com/sdminonne/workflow-controller/pkg/client"
