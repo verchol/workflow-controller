@@ -25,7 +25,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	wclient "github.com/sdminonne/workflow-controller/pkg/client"
@@ -37,16 +36,9 @@ type WorkflowController struct {
 	controller *controller.WorkflowController
 }
 
-func initKubeConfig(c *Config) (*rest.Config, error) {
-	if len(c.KubeConfigFile) > 0 {
-		return clientcmd.BuildConfigFromFlags("", c.KubeConfigFile) // out of cluster config
-	}
-	return rest.InClusterConfig()
-}
-
 // NewWorkflowController  initializes and returns a ready to run WorkflowController
 func NewWorkflowController(c *Config) *WorkflowController {
-	kubeConfig, err := initKubeConfig(c)
+	kubeConfig, err := clientcmd.BuildConfigFromFlags("", c.KubeConfigFile)
 	if err != nil {
 		glog.Fatalf("Unable to init workflow controller: %v", err)
 	}
