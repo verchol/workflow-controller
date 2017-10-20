@@ -516,10 +516,11 @@ func (w *WorkflowController) manageWorkflowJobStep(workflow *wapi.Workflow, step
 		jobFinished := IsJobFinished(job)
 		stepStatus := GetStepStatusByName(workflow, stepName)
 		if stepStatus == nil {
-			workflow.Status.Statuses = append(workflow.Status.Statuses, wapi.WorkflowStepStatus{
+			stepStatus = &wapi.WorkflowStepStatus{
 				Name:      stepName,
 				Complete:  jobFinished,
-				Reference: *reference})
+				Reference: *reference}
+			workflow.Status.Statuses = append(workflow.Status.Statuses, *stepStatus)
 			workflowUpdated = true
 		}
 		if jobFinished {
