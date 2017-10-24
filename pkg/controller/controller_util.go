@@ -109,7 +109,8 @@ func IsJobFinished(j *batch.Job) bool {
 	return false
 }
 
-func cascadeDeleteOptions(gracePeriodSeconds int64) *metav1.DeleteOptions {
+// CascadeDeleteOptions returns a DeleteOptions with Cascaded set
+func CascadeDeleteOptions(gracePeriodSeconds int64) *metav1.DeleteOptions {
 	return &metav1.DeleteOptions{
 		GracePeriodSeconds: func(t int64) *int64 { return &t }(gracePeriodSeconds),
 		PropagationPolicy: func() *metav1.DeletionPropagation {

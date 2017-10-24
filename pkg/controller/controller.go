@@ -306,27 +306,6 @@ func (w *WorkflowController) onDeleteWorkflow(obj interface{}) {
 		glog.Errorf("Unable to get key for %#v: %v", obj, err)
 		return
 	}
-	// get deleted workflow object
-	workflow, ok := obj.(*wapi.Workflow)
-	if !ok {
-		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-		if !ok {
-			glog.Errorf("unknown object from Workflow delete event: %#v", obj)
-			return
-		}
-		workflow, ok = tombstone.Obj.(*wapi.Workflow)
-		if !ok {
-			glog.Errorf("Tombstone contained object that is not an Workflow: %#v", obj)
-			return
-		}
-	}
-	// clean ALL jobs for deleted workflow
-	err = w.cleanWorkflowJobs(workflow)
-	if err != nil {
-		glog.Errorf("Unable to delete workflow jobs for %#v: %v", workflow, err)
-		return
-	}
-
 	w.queue.Add(key)
 }
 

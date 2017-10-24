@@ -30,6 +30,7 @@ import (
 	kubeinformers "k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
 	wclient "github.com/sdminonne/workflow-controller/pkg/client"
@@ -85,7 +86,7 @@ func NewWorkflowController(c *Config) *WorkflowController {
 		kubeInformerFactory:     kubeInformerFactory,
 		workflowInformerFactory: workflowInformerFactory,
 		controller:              controller.NewWorkflowController(workflowClient, kubeClient, kubeInformerFactory, workflowInformerFactory),
-		GC:                      garbagecollector.NewGarbageCollector(workflowClient, kubeClient),
+		GC:                      garbagecollector.NewGarbageCollector(workflowClient, kubeClient, workflowInformerFactory),
 	}
 }
 
@@ -96,15 +97,19 @@ func (c *WorkflowController) Run() {
 		defer cancelFunc()
 		c.kubeInformerFactory.Start(ctx.Done())
 		c.workflowInformerFactory.Start(ctx.Done())
-		c.controller.Run(ctx)
 		c.runGC(ctx)
+		c.controller.Run(ctx)
+
 	}
 }
 
 func (c *WorkflowController) runGC(ctx context.Context) {
 	go func() {
+		if !cache.WaitForCacheSync(ctx.Done(), c.GC.WorkflowSynced) {
+			glog.Errorf("Timed out waiting for caches to sync")
+		}
 		wait.Until(func() {
 			c.GC.CollectWorkflowJobs()
-		}, time.Second*10, ctx.Done())
+		}, garbagecollector.Interval, ctx.Done())
 	}()
 }
